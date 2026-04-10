@@ -30,15 +30,33 @@
     });
   }
 
+  // Sync config from popup in every frame (sendMessage only hits the main frame by default)
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "sync" || !changes.spamConfig?.newValue) return;
+    config = { ...config, ...changes.spamConfig.newValue };
+    scanAll();
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || changes.spamResetNonce == null) return;
+    blockedCount = 0;
+    userMap.clear();
+    unblockAll();
+    updateBadge();
+  });
+
   // Listen for config updates from popup
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === "CONFIG_UPDATE") {
       config = { ...config, ...msg.config };
-      // Re-scan existing messages
       scanAll();
     }
     if (msg.type === "GET_STATS") {
-      chrome.runtime.sendMessage({ type: "STATS", blockedCount, userMap: serializeUserMap() });
+      chrome.runtime.sendMessage({
+        type: "STATS",
+        blockedCount,
+        userMap: serializeUserMap(),
+      });
     }
     if (msg.type === "RESET_STATS") {
       blockedCount = 0;
@@ -112,14 +130,80 @@
     return { spam: false };
   }
 
+  // ─── Shadow DOM: chat lives under closed trees; light-DOM querySelector misses ─
+  function querySelectorDeep(root, selector) {
+    if (!root) return null;
+    function search(n) {
+      if (!n) return null;
+      if (n.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+        for (const c of n.children) {
+          const r = search(c);
+          if (r) return r;
+        }
+        return null;
+      }
+      if (n.nodeType !== Node.ELEMENT_NODE) return null;
+      try {
+        if (n.matches(selector)) return n;
+      } catch (_) {}
+      if (n.shadowRoot) {
+        const r = search(n.shadowRoot);
+        if (r) return r;
+      }
+      for (const c of n.children) {
+        const r = search(c);
+        if (r) return r;
+      }
+      return null;
+    }
+    return search(root);
+  }
+
+  function queryAllDeep(root, selector, out) {
+    if (!root) return;
+    if (root.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+      for (const c of root.children) queryAllDeep(c, selector, out);
+      return;
+    }
+    if (root.nodeType !== Node.ELEMENT_NODE) return;
+    try {
+      if (root.matches(selector)) out.push(root);
+    } catch (_) {}
+    if (root.shadowRoot) queryAllDeep(root.shadowRoot, selector, out);
+    for (const c of root.children) queryAllDeep(c, selector, out);
+  }
+
+  function findChatItemsContainer() {
+    const fromDoc =
+      querySelectorDeep(document.documentElement, "#items.yt-live-chat-item-list-renderer") ||
+      querySelectorDeep(document.documentElement, "#items.style-scope.yt-live-chat-item-list-renderer");
+    if (fromDoc) return fromDoc;
+    const hosts = [];
+    queryAllDeep(document.documentElement, "yt-live-chat-item-list-renderer", hosts);
+    for (const host of hosts) {
+      const items =
+        querySelectorDeep(host, "#items.yt-live-chat-item-list-renderer") ||
+        querySelectorDeep(host, "#items.style-scope.yt-live-chat-item-list-renderer") ||
+        querySelectorDeep(host, "#items");
+      if (items) return items;
+    }
+    return null;
+  }
+
   // ─── DOM helpers ──────────────────────────────────────────────────────────
   function getAuthor(el) {
-    const authorEl = el.querySelector("#author-name") || el.querySelector("yt-live-chat-author-chip");
+    const authorEl =
+      querySelectorDeep(el, "#author-name") ||
+      querySelectorDeep(el, "yt-live-chat-author-chip #author-name") ||
+      querySelectorDeep(el, "yt-live-chat-author-chip");
     return authorEl ? authorEl.textContent.trim() : null;
   }
 
   function getMessage(el) {
-    const msgEl = el.querySelector("#message") || el.querySelector(".yt-live-chat-text-message-renderer #message");
+    const msgEl =
+      querySelectorDeep(el, "#message") ||
+      querySelectorDeep(el, "yt-formatted-string#message") ||
+      querySelectorDeep(el, "#content #message");
     return msgEl ? msgEl.textContent.trim() : null;
   }
 
@@ -131,15 +215,21 @@
   }
 
   function unblockAll() {
-    document.querySelectorAll("[data-spam-blocked]").forEach(el => {
+    const blocked = [];
+    queryAllDeep(document.documentElement, "[data-spam-blocked]", blocked);
+    blocked.forEach((el) => {
       el.removeAttribute("data-spam-blocked");
       el.style.cssText = "";
     });
   }
 
   function updateBadge() {
-    if (!config.showBadge) return;
-    chrome.runtime.sendMessage({ type: "BADGE_UPDATE", count: blockedCount });
+    chrome.runtime.sendMessage({
+      type: "BADGE_UPDATE",
+      count: blockedCount,
+      userMap: serializeUserMap(),
+      showBadge: config.showBadge,
+    });
   }
 
   // ─── Process a single chat item ───────────────────────────────────────────
@@ -158,30 +248,30 @@
   }
 
   function scanAll() {
-    document.querySelectorAll("yt-live-chat-text-message-renderer").forEach(processItem);
+    const messages = [];
+    queryAllDeep(document.documentElement, "yt-live-chat-text-message-renderer", messages);
+    messages.forEach(processItem);
   }
 
   // ─── MutationObserver ─────────────────────────────────────────────────────
   function startObserver() {
     if (observer) observer.disconnect();
 
-    const chatContainer = document.querySelector("#items.yt-live-chat-item-list-renderer");
+    const chatContainer = findChatItemsContainer();
     if (!chatContainer) {
-      // Chat not loaded yet — retry
-      setTimeout(startObserver, 2000);
+      const delay = window.self === window.top ? 5000 : 2000;
+      setTimeout(startObserver, delay);
       return;
     }
 
     observer = new MutationObserver((mutations) => {
       for (const mut of mutations) {
         for (const node of mut.addedNodes) {
-          if (node.nodeType === 1) {
-            if (node.matches("yt-live-chat-text-message-renderer")) {
-              processItem(node);
-            } else {
-              node.querySelectorAll("yt-live-chat-text-message-renderer").forEach(processItem);
-            }
-          }
+          if (node.nodeType !== 1) continue;
+          if (node.matches?.("yt-live-chat-text-message-renderer")) processItem(node);
+          const nested = [];
+          queryAllDeep(node, "yt-live-chat-text-message-renderer", nested);
+          nested.forEach(processItem);
         }
       }
     });
@@ -190,17 +280,19 @@
     scanAll();
   }
 
-  // ─── Watch for YouTube SPA navigation ────────────────────────────────────
-  let lastUrl = location.href;
-  new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
-      userMap.clear();
-      blockedCount = 0;
-      updateBadge();
-      setTimeout(startObserver, 3000);
-    }
-  }).observe(document.body, { subtree: true, childList: true });
+  // ─── Watch for YouTube SPA navigation (top frame only; chat iframe URL is stable)
+  if (window.self === window.top) {
+    let lastUrl = location.href;
+    new MutationObserver(() => {
+      if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        userMap.clear();
+        blockedCount = 0;
+        updateBadge();
+        setTimeout(startObserver, 3000);
+      }
+    }).observe(document.body, { subtree: true, childList: true });
+  }
 
   // ─── Init ─────────────────────────────────────────────────────────────────
   loadConfig();

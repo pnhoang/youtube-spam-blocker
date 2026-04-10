@@ -146,22 +146,26 @@
   userAdd.addEventListener("click", addUser);
   userInput.addEventListener("keydown", (e) => { if (e.key === "Enter") addUser(); });
 
-  // Reset stats
+  // Reset stats (storage so every frame including live-chat iframe clears)
   btnReset.addEventListener("click", () => {
     statBlocked.textContent = "0";
-    statUsers.textContent   = "0";
+    statUsers.textContent = "0";
+    chrome.storage.local.set({ spamResetNonce: Date.now() });
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]?.id) chrome.tabs.sendMessage(tabs[0].id, { type: "RESET_STATS" });
     });
   });
 
-  // ── Poll stats from content script ────────────────────────────────────────
+  // ── Poll stats (chat iframe does not receive tabs.sendMessage on the main frame)
   function pollStats() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (!tabs[0]?.id) return;
-      chrome.tabs.sendMessage(tabs[0].id, { type: "GET_STATS" }, (resp) => {
+      const tabId = tabs[0]?.id;
+      if (tabId == null) return;
+      chrome.runtime.sendMessage({ type: "POPUP_STATS", tabId }, (resp) => {
         if (chrome.runtime.lastError || !resp) return;
-        // stats are pushed via onMessage below
+        statBlocked.textContent = resp.blockedCount || 0;
+        const flagged = Object.values(resp.userMap || {}).filter((u) => u.blocked).length;
+        statUsers.textContent = flagged;
       });
     });
   }
@@ -169,7 +173,7 @@
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === "STATS") {
       statBlocked.textContent = msg.blockedCount || 0;
-      const flagged = Object.values(msg.userMap || {}).filter(u => u.blocked).length;
+      const flagged = Object.values(msg.userMap || {}).filter((u) => u.blocked).length;
       statUsers.textContent = flagged;
     }
   });
