@@ -2,6 +2,9 @@
 
 A Chrome extension that automatically detects and hides spam messages in YouTube Live chat.
 
+<img width="884" height="847" alt="Screenshot 2026-04-11 at 00 09 32" src="https://github.com/user-attachments/assets/77030180-fbb5-4940-af9a-63ebeeb5a615" />
+
+
 ## Features
 
 - **Rate Limiting** — Hides messages from users who post more than N times per minute (configurable 2–30)
