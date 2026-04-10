@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YT Spam Blocker</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --border: #2a2a2a;
+      --accent: #ff4444;
+      --accent-dim: rgba(255,68,68,0.15);
+      --green: #22c55e;
+      --yellow: #eab308;
+      --text: #e8e8e8;
+      --muted: #666;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    body {
+      width: 340px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      user-select: none;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo-icon {
+      width: 28px; height: 28px;
+      background: var(--accent);
+      border-radius: 4px;
+      display: grid; place-items: center;
+      font-size: 14px;
+    }
+    .logo-text {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      line-height: 1.3;
+      color: var(--text);
+    }
+    .logo-text span { color: var(--accent); }
+
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; }
+    .toggle-label { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .toggle {
+      position: relative; width: 36px; height: 20px;
+    }
+    .toggle input { display: none; }
+    .toggle-slider {
+      position: absolute; inset: 0;
+      background: #333; border-radius: 10px;
+      cursor: pointer; transition: background .2s;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute; top: 3px; left: 3px;
+      width: 14px; height: 14px;
+      background: #666; border-radius: 50%;
+      transition: transform .2s, background .2s;
+    }
+    .toggle input:checked + .toggle-slider { background: var(--accent-dim); border: 1px solid var(--accent); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(16px); background: var(--accent); }
+
+    /* ── Stats bar ── */
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      border-bottom: 1px solid var(--border);
+    }
+    .stat {
+      padding: 10px 0;
+      text-align: center;
+      border-right: 1px solid var(--border);
+    }
+    .stat:last-child { border-right: none; }
+    .stat-val {
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--accent);
+      display: block;
+    }
+    .stat-val.green { color: var(--green); }
+    .stat-val.yellow { color: var(--yellow); }
+    .stat-lbl { font-size: 10px; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+
+    /* ── Sections ── */
+    .section {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    /* ── Sliders ── */
+    .field { margin-bottom: 10px; }
+    .field:last-child { margin-bottom: 0; }
+    .field-label {
+      display: flex; justify-content: space-between;
+      margin-bottom: 5px;
+      font-size: 12px; color: #aaa;
+    }
+    .field-label b {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+      font-weight: 600;
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%; height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      transition: transform .1s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+    /* ── Keyword / block inputs ── */
+    .tag-input-row {
+      display: flex; gap: 6px; margin-bottom: 8px;
+    }
+    .tag-input-row input[type=text] {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 9px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: var(--mono);
+      outline: none;
+      transition: border-color .15s;
+    }
+    .tag-input-row input[type=text]:focus { border-color: var(--accent); }
+    .btn-add {
+      background: var(--accent);
+      border: none; color: #fff;
+      padding: 6px 11px; border-radius: 4px;
+      cursor: pointer; font-size: 16px; line-height: 1;
+      transition: opacity .15s;
+    }
+    .btn-add:hover { opacity: 0.85; }
+
+    .tags { display: flex; flex-wrap: wrap; gap: 5px; min-height: 4px; }
+    .tag {
+      display: flex; align-items: center; gap: 4px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 3px 7px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+      animation: tagIn .15s ease;
+    }
+    .tag.blocked { border-color: var(--accent); color: var(--accent); }
+    @keyframes tagIn { from { opacity:0; transform:scale(.9); } to { opacity:1; transform:scale(1); } }
+    .tag-del {
+      cursor: pointer; color: var(--muted);
+      font-size: 13px; line-height: 1;
+      transition: color .1s;
+    }
+    .tag-del:hover { color: var(--accent); }
+
+    /* ── Footer ── */
+    footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface);
+    }
+    .btn-reset {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 5px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: var(--mono);
+      transition: all .15s;
+    }
+    .btn-reset:hover { border-color: var(--accent); color: var(--accent); }
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 2s infinite;
+    }
+    .status-dot.off { background: var(--muted); box-shadow: none; animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .status-txt { font-size: 11px; font-family: var(--mono); color: var(--muted); margin-left: 6px; }
+
+    .not-live {
+      padding: 20px 16px;
+      text-align: center;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .not-live span { display: block; font-size: 24px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🛡</div>
+      <div class="logo-text">YT SPAM<br><span>BLOCKER</span></div>
+    </div>
+    <div class="toggle-wrap">
+      <span class="toggle-label">ACTIVE</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggleEnabled" checked />
+        <div class="toggle-slider"></div>
+      </label>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <span class="stat-val" id="statBlocked">0</span>
+      <span class="stat-lbl">Blocked</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val yellow" id="statUsers">0</span>
+      <span class="stat-lbl">Flagged</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val green" id="statRate">5/min</span>
+      <span class="stat-lbl">Rate Limit</span>
+    </div>
+  </div>
+
+  <div id="mainContent">
+
+    <div class="section">
+      <div class="section-title">Detection Sensitivity</div>
+
+      <div class="field">
+        <div class="field-label">
+          Messages per minute limit
+          <b id="rateVal">5</b>
+        </div>
+        <input type="range" id="rateLimit" min="2" max="30" value="5" />
+      </div>
+
+      <div class="field">
+        <div class="field-label">
+          Repeat message threshold
+          <b id="repeatVal">70%</b>
+        </div>
+        <input type="range" id="repeatRatio" min="30" max="100" value="70" />
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Keyword Filters</div>
+      <div class="tag-input-row">
+        <input type="text" id="kwInput" placeholder="e.g. promo, free robux…" maxlength="50" />
+        <button class="btn-add" id="kwAdd">+</button>
+      </div>
+      <div class="tags" id="kwTags"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Blocked Users</div>
+      <div class="tag-input-row">
+        <input type="text" id="userInput" placeholder="username to block…" maxlength="80" />
+        <button class="btn-add" id="userAdd">+</button>
+      </div>
+      <div class="tags" id="userTags"></div>
+    </div>
+
+  </div>
+
+  <footer>
+    <button class="btn-reset" id="btnReset">↺ Reset Stats</button>
+    <div style="display:flex;align-items:center">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-txt" id="statusTxt">monitoring chat</span>
+    </div>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

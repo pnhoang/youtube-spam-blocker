@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Lock files (keep pnpm-lock.yaml only)
+package-lock.json
+yarn.lock
+
+# Testing
+coverage/
+*.log
+
+# Production builds
+dist/
+build/
+.next/
+.expo/
+.turbo/
+
+# Environment variables
+.env
+.env*.local
+.env*.production
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Turborepo
+.turbo
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+.cache/
+temp/
+tmp/
